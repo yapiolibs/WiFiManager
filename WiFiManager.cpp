@@ -12,6 +12,11 @@
 
 #include "WiFiManager.h"
 
+#ifdef ESP32
+#include <driver/uart.h>
+#include <esp_wps.h>
+#endif
+
 WiFiManagerParameter::WiFiManagerParameter(const char *custom) {
   _id = NULL;
   _placeholder = NULL;
@@ -290,6 +295,25 @@ boolean  WiFiManager::startConfigPortal(char const *apName, char const *apPasswo
   return  WiFi.status() == WL_CONNECTED;
 }
 
+namespace {
+void disconnectStation()
+{
+//trying to fix connection in progress hanging
+#ifdef ESP8266
+    ETS_UART_INTR_DISABLE();
+    wifi_station_disconnect();
+    ETS_UART_INTR_ENABLE();
+#elif ESP32
+    uart_disable_rx_intr(UART_NUM_0);
+    uart_disable_rx_intr(UART_NUM_1);
+    uart_disable_rx_intr(UART_NUM_2);
+    WiFi.enableSTA(false);
+    uart_enable_rx_intr(UART_NUM_0);
+    uart_enable_rx_intr(UART_NUM_1);
+    uart_enable_rx_intr(UART_NUM_2);
+#endif
+}
+} // namespace
 
 int WiFiManager::connectWifi(String ssid, String pass) {
   DEBUG_WM(F("Connecting as wifi client..."));
@@ -313,9 +337,7 @@ int WiFiManager::connectWifi(String ssid, String pass) {
   //check if we have ssid and pass and force those, if not, try with last saved values
   if (ssid != "") {
     //trying to fix connection in progress hanging
-    ETS_UART_INTR_DISABLE();
-    wifi_station_disconnect();
-    ETS_UART_INTR_ENABLE();
+    disconnectStation();
     res = WiFi.begin(ssid.c_str(), pass.c_str(),0,NULL,true);
     if(res != WL_CONNECTED){
       DEBUG_WM(F("[ERROR] WiFi.begin res:"));
@@ -325,9 +347,7 @@ int WiFiManager::connectWifi(String ssid, String pass) {
     if (WiFi.SSID() != "") {
       DEBUG_WM(F("Using last saved values, should be faster"));
       //trying to fix connection in progress hanging
-      ETS_UART_INTR_DISABLE();
-      wifi_station_disconnect();
-      ETS_UART_INTR_ENABLE();
+      disconnectStation();
       res = WiFi.begin();
     } else {
       DEBUG_WM(F("No saved credentials"));
@@ -371,9 +391,33 @@ uint8_t WiFiManager::waitForConnectResult() {
   }
 }
 
+namespace {
+#ifdef ESP32
+
+static esp_wps_config_t wps_config;
+
+void wpsInitConfig() {
+  wps_config.crypto_funcs = &g_wifi_default_wps_crypto_funcs;
+  wps_config.wps_type = WPS_TYPE_PBC;
+  strcpy(wps_config.factory_info.manufacturer, "ESPRESSIF");
+  strcpy(wps_config.factory_info.model_number, "ESP32");
+  strcpy(wps_config.factory_info.model_name, "ESPRESSIF IOT");
+  strcpy(wps_config.factory_info.device_name, "ESP STATION");
+}
+
+#endif
+
+}
 void WiFiManager::startWPS() {
   DEBUG_WM(F("START WPS"));
+#ifdef ESP8266
   WiFi.beginWPSConfig();
+#elif ESP32
+  wpsInitConfig();
+  esp_wifi_wps_disable();
+  esp_wifi_wps_enable(&wps_config);
+  esp_wifi_wps_start(0);
+#endif
   DEBUG_WM(F("END WPS"));
 }
 /*
@@ -746,7 +790,12 @@ void WiFiManager::handleReset() {
 
   DEBUG_WM(F("Sent reset page"));
   delay(5000);
+
+#ifdef ESP8266
   ESP.reset();
+#elif ESP32
+  ESP.restart();
+#endif
   delay(2000);
 }
 
@@ -850,7 +899,7 @@ String WiFiManager::toStringIp(IPAddress ip) {
   return res;
 }
 
-String WiFiManager::getChipId() const {
+String WiFiManager::getChipId() {
 #ifdef ESP8266
     return String(ESP.getChipId());
 #elif ESP32
