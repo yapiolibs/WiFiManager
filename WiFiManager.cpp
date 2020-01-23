@@ -1,6 +1,6 @@
 /**************************************************************
-   WiFiManager is a library for the ESP8266/Arduino platform
-   (https://github.com/esp8266/Arduino) to enable easy
+   WiFiManager is a library for the ESP8266/ESP32 Arduino platform
+   (https://github.com/esp8266/Arduino, https://github.com/espressif/arduino-esp32) to enable easy
    configuration and reconfiguration of WiFi credentials using a Captive Portal
    inspired by:
    http://www.esp8266.com/viewtopic.php?f=29&t=2520
@@ -106,7 +106,7 @@ bool WiFiManager::addParameter(WiFiManagerParameter *p) {
 
 void WiFiManager::setupConfigPortal() {
   dnsServer.reset(new DNSServer());
-  server.reset(new ESP8266WebServer(80));
+  server.reset(new WebServerType(80));
 
   DEBUG_WM(F(""));
   _configPortalStart = millis();
@@ -157,7 +157,7 @@ void WiFiManager::setupConfigPortal() {
 }
 
 boolean WiFiManager::autoConnect() {
-  String ssid = "ESP" + String(ESP.getChipId());
+  String ssid = "ESP" + String(getChipId());
   return autoConnect(ssid.c_str(), NULL);
 }
 
@@ -191,7 +191,7 @@ boolean WiFiManager::configPortalHasTimeout(){
 }
 
 boolean WiFiManager::startConfigPortal() {
-  String ssid = "ESP" + String(ESP.getChipId());
+  String ssid = "ESP" + String(getChipId());
   return startConfigPortal(ssid.c_str(), NULL);
 }
 
@@ -695,17 +695,21 @@ void WiFiManager::handleInfo() {
   page += FPSTR(HTTP_HEADER_END);
   page += F("<dl>");
   page += F("<dt>Chip ID</dt><dd>");
-  page += ESP.getChipId();
+  page += getChipId();
   page += F("</dd>");
+#ifdef ESP8266
   page += F("<dt>Flash Chip ID</dt><dd>");
   page += ESP.getFlashChipId();
   page += F("</dd>");
+#endif
   page += F("<dt>IDE Flash Size</dt><dd>");
   page += ESP.getFlashChipSize();
   page += F(" bytes</dd>");
+#ifdef ESP8266
   page += F("<dt>Real Flash Size</dt><dd>");
   page += ESP.getFlashChipRealSize();
   page += F(" bytes</dd>");
+#endif
   page += F("<dt>Soft AP IP</dt><dd>");
   page += WiFi.softAPIP().toString();
   page += F("</dd>");
@@ -844,4 +848,12 @@ String WiFiManager::toStringIp(IPAddress ip) {
   }
   res += String(((ip >> 8 * 3)) & 0xFF);
   return res;
+}
+
+String WiFiManager::getChipId() const {
+#ifdef ESP8266
+    return String(ESP.getChipId());
+#elif ESP32
+    return String((uint16_t)(ESP.getEfuseMac()>>32));
+#endif
 }
