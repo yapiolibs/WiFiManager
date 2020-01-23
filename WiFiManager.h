@@ -13,8 +13,16 @@
 #ifndef WiFiManager_h
 #define WiFiManager_h
 
+#ifdef ESP8266
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
+#elif ESP32
+#include <WiFi.h>
+#include <WebServer.h>
+#else
+#error Platform not supported.
+#endif
+
 #include <DNSServer.h>
 #include <memory>
 
