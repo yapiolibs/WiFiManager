@@ -187,8 +187,20 @@ boolean WiFiManager::autoConnect(char const *apName, char const *apPassword) {
   return startConfigPortal(apName, apPassword);
 }
 
+namespace {
+
+uint8_t getConnectedStations() {
+#if defined(ESP8266)
+    return wifi_softap_get_station_num();
+#elif defined(ESP32)
+    return WiFi.softAPgetStationNum();
+#endif
+}
+
+} // namespace
+
 boolean WiFiManager::configPortalHasTimeout(){
-    if(_configPortalTimeout == 0 || wifi_softap_get_station_num() > 0){
+    if(_configPortalTimeout == 0 || getConnectedStations() > 0){
       _configPortalStart = millis(); // kludge, bump configportal start time to skew timeouts
       return false;
     }
@@ -299,11 +311,11 @@ namespace {
 void disconnectStation()
 {
 //trying to fix connection in progress hanging
-#ifdef ESP8266
+#if defined(ESP8266)
     ETS_UART_INTR_DISABLE();
     wifi_station_disconnect();
     ETS_UART_INTR_ENABLE();
-#elif ESP32
+#elif defined(ESP32)
     uart_disable_rx_intr(UART_NUM_0);
     uart_disable_rx_intr(UART_NUM_1);
     uart_disable_rx_intr(UART_NUM_2);
@@ -392,7 +404,7 @@ uint8_t WiFiManager::waitForConnectResult() {
 }
 
 namespace {
-#ifdef ESP32
+#if defined(ESP32)
 
 static esp_wps_config_t wps_config;
 
@@ -410,9 +422,9 @@ void wpsInitConfig() {
 }
 void WiFiManager::startWPS() {
   DEBUG_WM(F("START WPS"));
-#ifdef ESP8266
+#if defined(ESP8266)
   WiFi.beginWPSConfig();
-#elif ESP32
+#elif defined(ESP32)
   wpsInitConfig();
   esp_wifi_wps_disable();
   esp_wifi_wps_enable(&wps_config);
@@ -580,7 +592,12 @@ void WiFiManager::handleWifi(boolean scan) {
           rssiQ += quality;
           item.replace("{v}", WiFi.SSID(indices[i]));
           item.replace("{r}", rssiQ);
-          if (WiFi.encryptionType(indices[i]) != ENC_TYPE_NONE) {
+#if defined(ESP8266)
+          auto non_enc_type = ENC_TYPE_NONE;
+#elif defined(ESP32)
+          auto non_enc_type = WIFI_AUTH_MAX;
+#endif
+          if (WiFi.encryptionType(indices[i]) != non_enc_type) {
             item.replace("{i}", "l");
           } else {
             item.replace("{i}", "");
@@ -741,7 +758,7 @@ void WiFiManager::handleInfo() {
   page += F("<dt>Chip ID</dt><dd>");
   page += getChipId();
   page += F("</dd>");
-#ifdef ESP8266
+#if defined(ESP8266)
   page += F("<dt>Flash Chip ID</dt><dd>");
   page += ESP.getFlashChipId();
   page += F("</dd>");
@@ -749,7 +766,7 @@ void WiFiManager::handleInfo() {
   page += F("<dt>IDE Flash Size</dt><dd>");
   page += ESP.getFlashChipSize();
   page += F(" bytes</dd>");
-#ifdef ESP8266
+#if defined(ESP8266)
   page += F("<dt>Real Flash Size</dt><dd>");
   page += ESP.getFlashChipRealSize();
   page += F(" bytes</dd>");
@@ -791,9 +808,9 @@ void WiFiManager::handleReset() {
   DEBUG_WM(F("Sent reset page"));
   delay(5000);
 
-#ifdef ESP8266
+#if defined(ESP8266)
   ESP.reset();
-#elif ESP32
+#elif defined(ESP32)
   ESP.restart();
 #endif
   delay(2000);
@@ -900,9 +917,9 @@ String WiFiManager::toStringIp(IPAddress ip) {
 }
 
 String WiFiManager::getChipId() {
-#ifdef ESP8266
+#if defined(ESP8266)
     return String(ESP.getChipId());
-#elif ESP32
+#elif defined(ESP32)
     return String((uint16_t)(ESP.getEfuseMac()>>32));
 #endif
 }
